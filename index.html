@@ -68,6 +68,7 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             font-size: 13px;
             margin-top: 5px;
+            text-transform: uppercase;
         }
         .input-bloco {
             margin-bottom: 8px;
@@ -115,7 +116,7 @@
             background-color: #536b9e;
         }
         .btn-pdf {
-            background-color: #2e7d32; /* Verde para remeter a relatório/excel */
+            background-color: #2e7d32; 
             margin-top: 15px;
         }
         .btn-pdf:hover {
@@ -136,8 +137,8 @@
     <div id="painel">
         <h3>Dados do Relatório</h3>
         <div class="input-bloco">
-            <label>Nome do Produto no PDF:</label>
-            <input type="text" id="nome_produto" value="PRATELEIRA 45 X 1,36">
+            <label>Nome do Produto:</label>
+            <input type="text" id="nome_produto" value="PRATELEIRA">
         </div>
 
         <h3 style="margin-top: 15px;">Dimensões do Barrote</h3>
@@ -173,7 +174,7 @@
 
         // 1. Cena e Câmera
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xe9ecef); // Fundo cinza claro que vai aparecer no PDF
+        scene.background = new THREE.Color(0xe9ecef); 
 
         const gridHelper = new THREE.GridHelper(10, 50, 0xcccccc, 0xdddddd);
         scene.add(gridHelper);
@@ -181,7 +182,7 @@
         const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(5, 4, 5); 
 
-        // 2. Renderizador em Alta Qualidade (preserveDrawingBuffer é vital para o print do PDF)
+        // 2. Renderizador em Alta Qualidade 
         const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -223,9 +224,9 @@
         scene.add(grupoPalete);
 
         // 4. Materiais
-        const matBarrote = new THREE.MeshLambertMaterial({ color: 0x2b3a5e }); // Azul escuro igual da foto
-        const matForro = new THREE.MeshLambertMaterial({ color: 0xc4b7a6 });   // Cor do forro da foto
-        const matProduto = new THREE.MeshLambertMaterial({ color: 0x829a88 }); // Verde escuro da foto
+        const matBarrote = new THREE.MeshLambertMaterial({ color: 0x2b3a5e }); 
+        const matForro = new THREE.MeshLambertMaterial({ color: 0xc4b7a6 });   
+        const matProduto = new THREE.MeshLambertMaterial({ color: 0x829a88 }); 
         const matLinha = new THREE.LineBasicMaterial({ color: 0x111111, linewidth: 1 });
 
         function adicionarContorno(mesh) {
@@ -356,49 +357,66 @@
             `;
         };
 
-        // FUNÇÃO PARA GERAR O PDF (Igual ao seu modelo)
+        // FUNÇÃO PARA GERAR O PDF 
         window.gerarPDF = function() {
-            // Inicializa o jsPDF
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4'); // Retrato, milímetros, folha A4
+            const doc = new jsPDF('p', 'mm', 'a4'); 
 
-            // Pega o nome do produto
-            let nomeProduto = document.getElementById('nome_produto').value;
+            // Pega as informações de texto e dimensões
+            let nomeProduto = document.getElementById('nome_produto').value.trim();
             if(!nomeProduto) nomeProduto = "PRODUTO";
 
-            // Pega os dados
+            const pLarg = parseFloat(document.getElementById('p_larg').value);
+            const pComp = parseFloat(document.getElementById('p_comp').value);
+            
+            // Formata a largura (multiplica por 100) e o comprimento (troca . por ,)
+            // Ex: 0.45 vira "45", e 1.36 vira "1,36"
+            const largFormatada = Math.round(pLarg * 100);
+            const compFormatada = pComp.toString().replace('.', ',');
+
             const qtd = window.dadosRelatorio.totalPecas;
             const vol = window.dadosRelatorio.volTotal;
 
-            // Configura a fonte para o Título (PRATELEIRA 45 X 1,36)
+            // --- CONSTRUÇÃO DO TEXTO NO PDF ---
+            const centroX = 105; // Centro da folha A4
+            let linhaY = 30;     // Posição inicial no eixo Y
+
+            // Título: Nome do Produto
             doc.setFont("helvetica", "bold");
             doc.setFontSize(22);
-            doc.text(nomeProduto.toUpperCase(), 105, 30, { align: 'center' }); // X=105 é o centro exato da folha A4 (que tem 210mm)
+            doc.text(nomeProduto.toUpperCase(), centroX, linhaY, { align: 'center' });
 
-            // Configura a fonte para os Dados
+            linhaY += 10; // Desce 10mm
+
+            // Dimensões
             doc.setFont("helvetica", "normal");
             doc.setFontSize(14);
-            
-            // Texto da Quantidade
-            doc.text(`QUANT. RÉGUAS: ${qtd}`, 105, 45, { align: 'center' });
-            
-            // Texto do Volume (Trocando ponto por vírgula para ficar no padrão BR)
-            let volFormatado = vol.toFixed(5).replace('.', ',');
-            doc.text(`M³ TOTAL: ${volFormatado} m³`, 105, 55, { align: 'center' });
+            doc.text(`DIMENSÃO: ${largFormatada} X ${compFormatada}`, centroX, linhaY, { align: 'center' });
 
-            // Pega a imagem 3D do canvas atual
+            linhaY += 8; 
+
+            // Quantidade de Réguas
+            doc.text(`QUANT. RÉGUAS: ${qtd}`, centroX, linhaY, { align: 'center' });
+
+            linhaY += 8;
+
+            // M³ Total
+            let volFormatado = vol.toFixed(5).replace('.', ',');
+            doc.text(`M³ TOTAL: ${volFormatado}`, centroX, linhaY, { align: 'center' });
+
+            linhaY += 15; // Espaço antes da imagem
+
+            // --- IMAGEM DO 3D ---
             const imgData = renderer.domElement.toDataURL('image/png');
             
-            // Calcula o tamanho da imagem para caber na folha sem distorcer
             const canvasWidth = renderer.domElement.width;
             const canvasHeight = renderer.domElement.height;
-            const pdfWidth = 190; // Margem de 10mm de cada lado (210 - 20)
+            const pdfWidth = 190; // Margem de 10mm de cada lado
             const pdfHeight = (canvasHeight * pdfWidth) / canvasWidth;
 
-            // Adiciona a imagem no PDF (X=10, Y=70)
-            doc.addImage(imgData, 'PNG', 10, 70, pdfWidth, pdfHeight);
+            doc.addImage(imgData, 'PNG', 10, linhaY, pdfWidth, pdfHeight);
 
-            // Gera e baixa o arquivo
+            // Salva o arquivo
             doc.save(`Relatorio_PCP_${nomeProduto.replace(/ /g, "_")}.pdf`);
         };
 
