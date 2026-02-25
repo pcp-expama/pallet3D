@@ -262,8 +262,6 @@
             const qtdCamadas = parseInt(document.getElementById('camadas').value);
 
             // --- 1. PONTALETES A 90 GRAUS (CRUZANDO A LARGURA) ---
-            // O comprimento do pontalete (bComp) fica no eixo X
-            // A largura do pontalete (bLarg) fica no eixo Z
             const geoBarrote = new THREE.BoxGeometry(bComp, bAlt, bLarg);
             const posYBarrote = bAlt / 2;
             
@@ -374,7 +372,8 @@
             const pLarg = parseFloat(document.getElementById('p_larg').value);
             const pCompStr = document.getElementById('p_comp').value.trim();
             
-            const largFormatada = Math.round(pLarg * 100);
+            // Formata a largura: M -> CM (multiplica por 100 mantendo os decimais exatos para evitar arredondamento indevido)
+            const largFormatada = Number((pLarg * 100).toFixed(2)).toString().replace('.', ',');
             const compFormatada = pCompStr.replace('.', ',');
 
             const qtd = window.dadosRelatorio.totalPecas;
