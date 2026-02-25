@@ -141,7 +141,7 @@
             <input type="text" id="nome_produto" value="PEÇAS CORTADAS DE MDF">
         </div>
 
-        <h3 style="margin-top: 15px;">Dimensões do Barrote</h3>
+        <h3 style="margin-top: 15px;">Dimensões do Pontalete</h3>
         <div class="linha-input"><label>Largura X (m):</label><input type="number" step="0.001" id="b_larg" value="0.080"></div>
         <div class="linha-input"><label>Compr. Z (m):</label><input type="number" step="0.001" id="b_comp" value="1.850"></div>
         <div class="linha-input"><label>Altura Y (m):</label><input type="number" step="0.001" id="b_alt" value="0.070"></div>
@@ -249,7 +249,7 @@
             const bLarg = parseFloat(document.getElementById('b_larg').value);
             const bComp = parseFloat(document.getElementById('b_comp').value);
             const bAlt = parseFloat(document.getElementById('b_alt').value);
-            const bRecuo = parseFloat(document.getElementById('b_recuo').value) || 0; // Captura o recuo
+            const bRecuo = parseFloat(document.getElementById('b_recuo').value) || 0; 
 
             const fLarg = parseFloat(document.getElementById('f_larg').value);
             const fComp = parseFloat(document.getElementById('f_comp').value);
@@ -261,11 +261,13 @@
 
             const qtdCamadas = parseInt(document.getElementById('camadas').value);
 
-            // --- 1. BARROTES (GIRADOS 90 GRAUS) COM RECUO ---
+            // --- 1. PONTALETES A 90 GRAUS (CRUZANDO A LARGURA) ---
+            // O comprimento do pontalete (bComp) fica no eixo X
+            // A largura do pontalete (bLarg) fica no eixo Z
             const geoBarrote = new THREE.BoxGeometry(bComp, bAlt, bLarg);
             const posYBarrote = bAlt / 2;
             
-            // Posições no eixo Z (Comprimento do forro) com a subtração/adição do recuo
+            // Recua os pontaletes das extremidades no eixo Z (Comprimento do forro)
             const posZTras = -(fComp / 2) + (bLarg / 2) + bRecuo;
             const posZFrente = (fComp / 2) - (bLarg / 2) - bRecuo;
 
@@ -366,66 +368,58 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4'); 
 
-            // Pega as informações de texto e dimensões
             let nomeProduto = document.getElementById('nome_produto').value.trim();
             if(!nomeProduto) nomeProduto = "PEÇAS CORTADAS DE MDF";
 
             const pLarg = parseFloat(document.getElementById('p_larg').value);
-            const pComp = parseFloat(document.getElementById('p_comp').value);
+            const pCompStr = document.getElementById('p_comp').value.trim();
             
-            // Formata a largura (multiplica por 100) e o comprimento (troca . por ,)
             const largFormatada = Math.round(pLarg * 100);
-            const compFormatada = pComp.toString().replace('.', ',');
+            const compFormatada = pCompStr.replace('.', ',');
 
             const qtd = window.dadosRelatorio.totalPecas;
             const vol = window.dadosRelatorio.volTotal;
 
             // --- CONSTRUÇÃO DO TEXTO NO PDF ---
-            const centroX = 105; // Centro da folha A4
-            let linhaY = 30;     // Posição inicial no eixo Y
+            const centroX = 105; 
+            let linhaY = 30;     
 
-            // Título: Nome do Produto
             doc.setFont("helvetica", "bold");
             doc.setFontSize(22);
             doc.text(nomeProduto.toUpperCase(), centroX, linhaY, { align: 'center' });
 
-            linhaY += 10; // Desce 10mm
+            linhaY += 10; 
 
-            // Dimensões
             doc.setFont("helvetica", "normal");
             doc.setFontSize(14);
             doc.text(`DIMENSÃO: ${largFormatada} X ${compFormatada}`, centroX, linhaY, { align: 'center' });
 
             linhaY += 8; 
 
-            // Quantidade de Réguas
             doc.text(`QUANT. RÉGUAS: ${qtd}`, centroX, linhaY, { align: 'center' });
 
             linhaY += 8;
 
-            // M³ Total
             let volFormatado = vol.toFixed(5).replace('.', ',');
             doc.text(`M³ TOTAL: ${volFormatado}`, centroX, linhaY, { align: 'center' });
 
-            linhaY += 15; // Espaço antes da imagem
+            linhaY += 15; 
 
             // --- IMAGEM DO 3D ---
             const imgData = renderer.domElement.toDataURL('image/png');
             
             const canvasWidth = renderer.domElement.width;
             const canvasHeight = renderer.domElement.height;
-            const pdfWidth = 190; // Margem de 10mm de cada lado
+            const pdfWidth = 190; 
             const pdfHeight = (canvasHeight * pdfWidth) / canvasWidth;
 
             doc.addImage(imgData, 'PNG', 10, linhaY, pdfWidth, pdfHeight);
 
-            // Salva o arquivo
             doc.save(`Relatorio_PCP_${nomeProduto.replace(/ /g, "_")}.pdf`);
         };
 
         window.atualizarPalete();
 
-        // Loop de Animação
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
@@ -433,7 +427,6 @@
         }
         animate();
 
-        // Responsividade
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
