@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Palete 3D - PCP</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #e9ecef;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        /* Painel de Controle Flutuante */
+        #painel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            width: 310px;
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 10;
+        }
+        #painel h3 {
+            margin-top: 0;
+            color: #333;
+            font-size: 15px;
+            border-bottom: 2px solid #6a82b8;
+            padding-bottom: 5px;
+        }
+        .linha-input {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        .linha-input label {
+            font-size: 13px;
+            color: #555;
+            font-weight: 500;
+        }
+        .linha-input input[type="number"] {
+            width: 75px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            text-align: right;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .linha-input input[type="text"] {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+        .input-bloco {
+            margin-bottom: 8px;
+        }
+        .input-bloco label {
+            font-size: 13px;
+            color: #555;
+            font-weight: 500;
+            display: block;
+        }
+        .resultado {
+            margin-top: 15px;
+            padding: 12px 10px;
+            background-color: #e3f2fd;
+            border-left: 4px solid #1976d2;
+            color: #0d47a1;
+            font-size: 14px;
+            border-radius: 0 4px 4px 0;
+            line-height: 1.6;
+        }
+        .resultado b {
+            color: #002171;
+        }
+        .resultado hr {
+            border: 0;
+            border-top: 1px solid #bbdefb;
+            margin: 8px 0;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+            transition: background 0.3s;
+            font-size: 14px;
+        }
+        .btn-atualizar {
+            background-color: #6a82b8;
+        }
+        .btn-atualizar:hover {
+            background-color: #536b9e;
+        }
+        .btn-pdf {
+            background-color: #2e7d32; /* Verde para remeter a relatório/excel */
+            margin-top: 15px;
+        }
+        .btn-pdf:hover {
+            background-color: #1b5e20;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="painel">
+        <h3>Dados do Relatório</h3>
+        <div class="input-bloco">
+            <label>Nome do Produto no PDF:</label>
+            <input type="text" id="nome_produto" value="PRATELEIRA 45 X 1,36">
+        </div>
+
+        <h3 style="margin-top: 15px;">Dimensões do Barrote</h3>
+        <div class="linha-input"><label>Largura X (m):</label><input type="number" step="0.001" id="b_larg" value="0.080"></div>
+        <div class="linha-input"><label>Compr. Z (m):</label><input type="number" step="0.001" id="b_comp" value="2.750"></div>
+        <div class="linha-input"><label>Altura Y (m):</label><input type="number" step="0.001" id="b_alt" value="0.070"></div>
+
+        <h3 style="margin-top: 15px;">Dimensões do Forro</h3>
+        <div class="linha-input"><label>Largura X (m):</label><input type="number" step="0.001" id="f_larg" value="1.850"></div>
+        <div class="linha-input"><label>Compr. Z (m):</label><input type="number" step="0.001" id="f_comp" value="2.750"></div>
+        <div class="linha-input"><label>Espessura Y (m):</label><input type="number" step="0.001" id="f_alt" value="0.015"></div>
+
+        <h3 style="margin-top: 15px;">Dimensões do Produto</h3>
+        <div class="linha-input"><label>Largura X (m):</label><input type="number" step="0.001" id="p_larg" value="0.45"></div>
+        <div class="linha-input"><label>Compr. Z (m):</label><input type="number" step="0.001" id="p_comp" value="1.36"></div>
+        <div class="linha-input"><label>Espessura Y (m):</label><input type="number" step="0.001" id="p_alt" value="0.015"></div>
+
+        <h3 style="margin-top: 15px;">Empilhamento</h3>
+        <div class="linha-input"><label>Qtd. Camadas:</label><input type="number" id="camadas" value="24"></div>
+
+        <div class="resultado" id="resultado-dados">
+            </div>
+
+        <button class="btn-atualizar" onclick="window.atualizarPalete()">Atualizar Simulação</button>
+        <button class="btn-pdf" onclick="window.gerarPDF()">Gerar Relatório PDF</button>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // 1. Cena e Câmera
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xe9ecef); // Fundo cinza claro que vai aparecer no PDF
+
+        const gridHelper = new THREE.GridHelper(10, 50, 0xcccccc, 0xdddddd);
+        scene.add(gridHelper);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(5, 4, 5); 
+
+        // 2. Renderizador em Alta Qualidade (preserveDrawingBuffer é vital para o print do PDF)
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+        // 3. Iluminação
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 8, 3);
+        dirLight.castShadow = true;
+        
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 20;
+        dirLight.shadow.camera.left = -4;
+        dirLight.shadow.camera.right = 4;
+        dirLight.shadow.camera.top = 4;
+        dirLight.shadow.camera.bottom = -4;
+        dirLight.shadow.bias = -0.0005;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.2);
+        fillLight.position.set(-5, 3, -5);
+        scene.add(fillLight);
+
+        // Grupo principal
+        const grupoPalete = new THREE.Group();
+        scene.add(grupoPalete);
+
+        // 4. Materiais
+        const matBarrote = new THREE.MeshLambertMaterial({ color: 0x2b3a5e }); // Azul escuro igual da foto
+        const matForro = new THREE.MeshLambertMaterial({ color: 0xc4b7a6 });   // Cor do forro da foto
+        const matProduto = new THREE.MeshLambertMaterial({ color: 0x829a88 }); // Verde escuro da foto
+        const matLinha = new THREE.LineBasicMaterial({ color: 0x111111, linewidth: 1 });
+
+        function adicionarContorno(mesh) {
+            const edges = new THREE.EdgesGeometry(mesh.geometry);
+            const line = new THREE.LineSegments(edges, matLinha);
+            mesh.add(line);
+        }
+
+        // Variáveis globais para armazenar os dados para o PDF
+        window.dadosRelatorio = {
+            totalPecas: 0,
+            volTotal: 0
+        };
+
+        // FUNÇÃO PRINCIPAL PARA ATUALIZAR 3D
+        window.atualizarPalete = function() {
+            grupoPalete.clear();
+
+            const bLarg = parseFloat(document.getElementById('b_larg').value);
+            const bComp = parseFloat(document.getElementById('b_comp').value);
+            const bAlt = parseFloat(document.getElementById('b_alt').value);
+
+            const fLarg = parseFloat(document.getElementById('f_larg').value);
+            const fComp = parseFloat(document.getElementById('f_comp').value);
+            const fAlt = parseFloat(document.getElementById('f_alt').value);
+
+            const pLarg = parseFloat(document.getElementById('p_larg').value);
+            const pComp = parseFloat(document.getElementById('p_comp').value);
+            const pAlt = parseFloat(document.getElementById('p_alt').value);
+
+            const qtdCamadas = parseInt(document.getElementById('camadas').value);
+
+            // --- 1. BARROTES ---
+            const geoBarrote = new THREE.BoxGeometry(bLarg, bAlt, bComp);
+            const posYBarrote = bAlt / 2;
+            const posXEsq = -(fLarg / 2) + (bLarg / 2);
+            const posXDir = (fLarg / 2) - (bLarg / 2);
+
+            const barroteEsq = new THREE.Mesh(geoBarrote, matBarrote);
+            barroteEsq.position.set(posXEsq, posYBarrote, 0);
+            barroteEsq.castShadow = true;
+            barroteEsq.receiveShadow = true;
+            
+            const barroteCentro = new THREE.Mesh(geoBarrote, matBarrote);
+            barroteCentro.position.set(0, posYBarrote, 0);
+            barroteCentro.castShadow = true;
+            barroteCentro.receiveShadow = true;
+            
+            const barroteDir = new THREE.Mesh(geoBarrote, matBarrote);
+            barroteDir.position.set(posXDir, posYBarrote, 0);
+            barroteDir.castShadow = true;
+            barroteDir.receiveShadow = true;
+
+            grupoPalete.add(barroteEsq, barroteCentro, barroteDir);
+
+            // --- 2. FORRO INFERIOR ---
+            const geoForro = new THREE.BoxGeometry(fLarg, fAlt, fComp);
+            const forroInferior = new THREE.Mesh(geoForro, matForro);
+            const posYForroInf = bAlt + (fAlt / 2);
+            forroInferior.position.set(0, posYForroInf, 0);
+            forroInferior.castShadow = true;
+            forroInferior.receiveShadow = true;
+            adicionarContorno(forroInferior);
+            grupoPalete.add(forroInferior);
+
+            // --- 3. PRODUTOS ---
+            let totalPecas = 0;
+            let alturaTotalProdutos = 0;
+            
+            if (pLarg > 0 && pComp > 0 && pAlt > 0) {
+                const colunasX = Math.floor(fLarg / pLarg);
+                const linhasZ = Math.floor(fComp / pComp);
+                const espacoOcupadoX = colunasX * pLarg;
+                const espacoOcupadoZ = linhasZ * pComp;
+                const inicioX = -(espacoOcupadoX / 2) + (pLarg / 2);
+                const inicioZ = -(espacoOcupadoZ / 2) + (pComp / 2);
+
+                const geoProduto = new THREE.BoxGeometry(pLarg, pAlt, pComp);
+                alturaTotalProdutos = qtdCamadas * pAlt;
+
+                for (let camada = 0; camada < qtdCamadas; camada++) {
+                    let posYProduto = bAlt + fAlt + (pAlt / 2) + (camada * pAlt);
+
+                    for (let z = 0; z < linhasZ; z++) {
+                        for (let x = 0; x < colunasX; x++) {
+                            const produto = new THREE.Mesh(geoProduto, matProduto);
+                            const posXP = inicioX + (x * pLarg);
+                            const posZP = inicioZ + (z * pComp);
+                            
+                            produto.position.set(posXP, posYProduto, posZP);
+                            produto.castShadow = true;
+                            produto.receiveShadow = true;
+                            adicionarContorno(produto); 
+                            
+                            grupoPalete.add(produto);
+                            totalPecas++; 
+                        }
+                    }
+                }
+            }
+
+            // --- 4. FORRO SUPERIOR ---
+            const forroSuperior = new THREE.Mesh(geoForro, matForro);
+            const posYForroSup = bAlt + fAlt + alturaTotalProdutos + (fAlt / 2);
+            forroSuperior.position.set(0, posYForroSup, 0);
+            forroSuperior.castShadow = true;
+            forroSuperior.receiveShadow = true;
+            adicionarContorno(forroSuperior);
+            grupoPalete.add(forroSuperior);
+
+            // --- 5. CÁLCULO DOS DADOS ---
+            const alturaTotalCalculada = bAlt + fAlt + alturaTotalProdutos + fAlt;
+            const alturaEmCm = alturaTotalCalculada * 100; 
+            
+            const volUnitario = pLarg * pComp * pAlt;
+            const volTotal = volUnitario * totalPecas;
+
+            // Salva dados na global para o PDF usar depois
+            window.dadosRelatorio.totalPecas = totalPecas;
+            window.dadosRelatorio.volTotal = volTotal;
+
+            document.getElementById('resultado-dados').innerHTML = `
+                <b>Altura Total:</b> ${alturaTotalCalculada.toFixed(3)} m <span style="font-size: 12px; color: #555;">(${alturaEmCm.toFixed(1)} cm)</span><br>
+                <hr>
+                <b>Total de Peças:</b> ${totalPecas} un<br>
+                <b>Vol. Unitário:</b> ${volUnitario.toFixed(5)} m³<br>
+                <b>Vol. Total:</b> ${volTotal.toFixed(5)} m³
+            `;
+        };
+
+        // FUNÇÃO PARA GERAR O PDF (Igual ao seu modelo)
+        window.gerarPDF = function() {
+            // Inicializa o jsPDF
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4'); // Retrato, milímetros, folha A4
+
+            // Pega o nome do produto
+            let nomeProduto = document.getElementById('nome_produto').value;
+            if(!nomeProduto) nomeProduto = "PRODUTO";
+
+            // Pega os dados
+            const qtd = window.dadosRelatorio.totalPecas;
+            const vol = window.dadosRelatorio.volTotal;
+
+            // Configura a fonte para o Título (PRATELEIRA 45 X 1,36)
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(22);
+            doc.text(nomeProduto.toUpperCase(), 105, 30, { align: 'center' }); // X=105 é o centro exato da folha A4 (que tem 210mm)
+
+            // Configura a fonte para os Dados
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(14);
+            
+            // Texto da Quantidade
+            doc.text(`QUANT. RÉGUAS: ${qtd}`, 105, 45, { align: 'center' });
+            
+            // Texto do Volume (Trocando ponto por vírgula para ficar no padrão BR)
+            let volFormatado = vol.toFixed(5).replace('.', ',');
+            doc.text(`M³ TOTAL: ${volFormatado} m³`, 105, 55, { align: 'center' });
+
+            // Pega a imagem 3D do canvas atual
+            const imgData = renderer.domElement.toDataURL('image/png');
+            
+            // Calcula o tamanho da imagem para caber na folha sem distorcer
+            const canvasWidth = renderer.domElement.width;
+            const canvasHeight = renderer.domElement.height;
+            const pdfWidth = 190; // Margem de 10mm de cada lado (210 - 20)
+            const pdfHeight = (canvasHeight * pdfWidth) / canvasWidth;
+
+            // Adiciona a imagem no PDF (X=10, Y=70)
+            doc.addImage(imgData, 'PNG', 10, 70, pdfWidth, pdfHeight);
+
+            // Gera e baixa o arquivo
+            doc.save(`Relatorio_PCP_${nomeProduto.replace(/ /g, "_")}.pdf`);
+        };
+
+        window.atualizarPalete();
+
+        // Loop de Animação
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Responsividade
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
