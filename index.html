@@ -19,7 +19,6 @@
             height: 100vh;
             display: block;
         }
-        /* Painel de Controle Flutuante */
         #painel {
             position: absolute;
             top: 20px;
@@ -105,22 +104,35 @@
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
-            margin-top: 10px;
             transition: background 0.3s;
-            font-size: 14px;
+            font-size: 13px;
         }
         .btn-atualizar {
             background-color: #6a82b8;
-        }
-        .btn-atualizar:hover {
-            background-color: #536b9e;
-        }
-        .btn-pdf {
-            background-color: #2e7d32; 
             margin-top: 15px;
         }
-        .btn-pdf:hover {
-            background-color: #1b5e20;
+        .btn-atualizar:hover { background-color: #536b9e; }
+        
+        .btn-fila {
+            background-color: #f57c00;
+        }
+        .btn-fila:hover { background-color: #e65100; }
+        
+        .btn-limpar {
+            background-color: #c62828;
+        }
+        .btn-limpar:hover { background-color: #b71c1c; }
+
+        .btn-pdf {
+            background-color: #2e7d32; 
+            margin-top: 10px;
+        }
+        .btn-pdf:hover { background-color: #1b5e20; }
+        
+        .botoes-fila {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
         }
     </style>
     <script type="importmap">
@@ -155,16 +167,22 @@
         <h3 style="margin-top: 15px;">Dimensões do Produto</h3>
         <div class="linha-input"><label>Largura X (m):</label><input type="number" step="0.001" id="p_larg" value="0.45"></div>
         <div class="linha-input"><label>Compr. Z (m):</label><input type="number" step="0.001" id="p_comp" value="1.36"></div>
-        <div class="linha-input"><label>Espessura Y (m):</label><input type="number" step="0.001" id="p_alt" value="0.015"></div>
+        <div class="linha-input"><label>Espessura Y (m):</label><input type="number" step="0.001" id="p_alt" value="0.006"></div>
 
         <h3 style="margin-top: 15px;">Empilhamento</h3>
-        <div class="linha-input"><label>Qtd. Camadas:</label><input type="number" id="camadas" value="24"></div>
+        <div class="linha-input"><label>Qtd. Camadas:</label><input type="number" id="camadas" value="120"></div>
 
         <div class="resultado" id="resultado-dados">
-            </div>
+        </div>
 
         <button class="btn-atualizar" onclick="window.atualizarPalete()">Atualizar Simulação</button>
-        <button class="btn-pdf" onclick="window.gerarPDF()">Gerar Relatório PDF</button>
+        
+        <div class="botoes-fila">
+            <button class="btn-fila" style="flex: 2;" onclick="window.adicionarFila()">+ Add Fila PDF (<span id="contador_pdf">0</span>/3)</button>
+            <button class="btn-limpar" style="flex: 1;" onclick="window.limparFila()">Limpar</button>
+        </div>
+        
+        <button class="btn-pdf" onclick="window.gerarPDF()">Gerar PDF Comparativo</button>
     </div>
 
     <div id="canvas-container"></div>
@@ -183,8 +201,8 @@
         const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(5, 4, 5); 
 
-        // 2. Renderizador em Alta Qualidade 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        // 2. Renderizador em Alta Qualidade (alpha: true permite fundo transparente para recorte perfeito)
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         
@@ -236,10 +254,115 @@
             mesh.add(line);
         }
 
-        // Variáveis globais para armazenar os dados para o PDF
-        window.dadosRelatorio = {
-            totalPecas: 0,
-            volTotal: 0
+        // --- SISTEMA DE CORTE ABSOLUTO (FUNDO TRANSPARENTE) ---
+        function cortarImagem(dataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    let top = null, bottom = null, left = null, right = null;
+                    
+                    // Como a foto foi tirada sem fundo, basta procurar por pixels não-transparentes (alpha > 5)
+                    for (let y = 0; y < canvas.height; y++) {
+                        for (let x = 0; x < canvas.width; x++) {
+                            const alpha = data[(y * canvas.width + x) * 4 + 3];
+                            if (alpha > 5) { // Se não é transparente, faz parte do palete
+                                if (top === null) top = y;
+                                bottom = y;
+                                if (left === null || x < left) left = x;
+                                if (right === null || x > right) right = x;
+                            }
+                        }
+                    }
+                    
+                    if (top === null) { 
+                        resolve({ url: dataUrl, width: img.width, height: img.height }); 
+                        return; 
+                    } 
+                    
+                    // Margem ZERO. A imagem ficará do tamanho exato da madeira.
+                    const padding = 0;
+                    const cropW = (right - left) + padding * 2;
+                    const cropH = (bottom - top) + padding * 2;
+                    
+                    const cropCanvas = document.createElement('canvas');
+                    cropCanvas.width = cropW;
+                    cropCanvas.height = cropH;
+                    const cropCtx = cropCanvas.getContext('2d');
+                    
+                    // Adicionando um fundo branco por trás da imagem cortada para ficar perfeito no PDF
+                    cropCtx.fillStyle = '#ffffff';
+                    cropCtx.fillRect(0, 0, cropW, cropH);
+                    cropCtx.drawImage(canvas, left, top, right - left, bottom - top, padding, padding, right - left, bottom - top);
+                    
+                    resolve({
+                        url: cropCanvas.toDataURL('image/png'),
+                        width: cropW,
+                        height: cropH
+                    });
+                };
+                img.src = dataUrl;
+            });
+        }
+
+        // --- SISTEMA DE FILA PARA O PDF MÚLTIPLO ---
+        window.filaPDF = [];
+        window.dadosRelatorio = { totalPecas: 0, volTotal: 0 };
+
+        window.adicionarFila = async function() {
+            if (window.filaPDF.length >= 3) {
+                alert("A fila já contém 3 simulações! Gere o relatório ou limpe a fila.");
+                return;
+            }
+
+            // MÁGICA DO ESTÚDIO: Tira a grade e o fundo, bate a foto, e devolve sem o usuário perceber.
+            const bgOriginal = scene.background;
+            scene.background = null; // Transparente
+            gridHelper.visible = false; // Esconde a grade do chão
+            
+            renderer.render(scene, camera);
+            const imgDataEstudio = renderer.domElement.toDataURL('image/png');
+            
+            // Retorna o visual ao normal
+            scene.background = bgOriginal;
+            gridHelper.visible = true;
+            renderer.render(scene, camera);
+
+            // Corta a foto de estúdio isolando apenas a madeira
+            const imgCortada = await cortarImagem(imgDataEstudio);
+
+            const pLarg = parseFloat(document.getElementById('p_larg').value);
+            const pCompStr = document.getElementById('p_comp').value.trim();
+            const pEspStr = document.getElementById('p_alt').value.trim();
+
+            const largFormatada = Number((pLarg * 100).toFixed(2)).toString().replace('.', ',');
+            const compFormatada = pCompStr.replace('.', ',');
+            const espFormatada = pEspStr.replace('.', ',');
+
+            window.filaPDF.push({
+                imgData: imgCortada.url,
+                imgW: imgCortada.width,   
+                imgH: imgCortada.height,  
+                larg: largFormatada,
+                comp: compFormatada,
+                esp: espFormatada,
+                qtd: window.dadosRelatorio.totalPecas,
+                vol: window.dadosRelatorio.volTotal
+            });
+
+            document.getElementById('contador_pdf').innerText = window.filaPDF.length;
+        };
+
+        window.limparFila = function() {
+            window.filaPDF = [];
+            document.getElementById('contador_pdf').innerText = "0";
         };
 
         // FUNÇÃO PRINCIPAL PARA ATUALIZAR 3D
@@ -265,7 +388,6 @@
             const geoBarrote = new THREE.BoxGeometry(bComp, bAlt, bLarg);
             const posYBarrote = bAlt / 2;
             
-            // Recua os pontaletes das extremidades no eixo Z (Comprimento do forro)
             const posZTras = -(fComp / 2) + (bLarg / 2) + bRecuo;
             const posZFrente = (fComp / 2) - (bLarg / 2) - bRecuo;
 
@@ -348,7 +470,6 @@
             const volUnitario = pLarg * pComp * pAlt;
             const volTotal = volUnitario * totalPecas;
 
-            // Salva dados na global para o PDF usar depois
             window.dadosRelatorio.totalPecas = totalPecas;
             window.dadosRelatorio.volTotal = volTotal;
 
@@ -361,60 +482,88 @@
             `;
         };
 
-        // FUNÇÃO PARA GERAR O PDF 
-        window.gerarPDF = function() {
+        // FUNÇÃO PARA GERAR O PDF (NOVO LAYOUT 2x2 E FORMATO DE DIMENSÃO OTIMIZADO)
+        window.gerarPDF = async function() {
+            if(window.filaPDF.length === 0) {
+                await window.adicionarFila();
+            }
+
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4'); 
+            const doc = new jsPDF('l', 'mm', 'a4'); // 'l' = landscape
+            const pageWidth = 297; 
 
             let nomeProduto = document.getElementById('nome_produto').value.trim();
             if(!nomeProduto) nomeProduto = "PEÇAS CORTADAS DE MDF";
 
-            const pLarg = parseFloat(document.getElementById('p_larg').value);
-            const pCompStr = document.getElementById('p_comp').value.trim();
-            
-            // Formata a largura: M -> CM (multiplica por 100 mantendo os decimais exatos para evitar arredondamento indevido)
-            const largFormatada = Number((pLarg * 100).toFixed(2)).toString().replace('.', ',');
-            const compFormatada = pCompStr.replace('.', ',');
-
-            const qtd = window.dadosRelatorio.totalPecas;
-            const vol = window.dadosRelatorio.volTotal;
-
-            // --- CONSTRUÇÃO DO TEXTO NO PDF ---
-            const centroX = 105; 
-            let linhaY = 30;     
-
+            // Título Principal
             doc.setFont("helvetica", "bold");
             doc.setFontSize(22);
-            doc.text(nomeProduto.toUpperCase(), centroX, linhaY, { align: 'center' });
+            doc.text(nomeProduto.toUpperCase(), pageWidth / 2, 20, { align: 'center' });
 
-            linhaY += 10; 
+            const qtdItens = window.filaPDF.length;
 
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(14);
-            doc.text(`DIMENSÃO: ${largFormatada} X ${compFormatada}`, centroX, linhaY, { align: 'center' });
+            for(let i = 0; i < qtdItens; i++) {
+                const item = window.filaPDF[i];
+                let centroX, linhaY;
+                let maxImgW = 125; 
 
-            linhaY += 8; 
+                // Lógica de posicionamento (2 em cima, 1 embaixo centralizado)
+                if (qtdItens === 1) {
+                    centroX = pageWidth / 2;
+                    linhaY = 40;
+                    maxImgW = 160;
+                } else if (qtdItens === 2) {
+                    centroX = i === 0 ? (pageWidth / 4) : (pageWidth / 4) * 3;
+                    linhaY = 40;
+                } else if (qtdItens === 3) {
+                    if (i === 0) {
+                        centroX = pageWidth / 4;
+                        linhaY = 32;
+                    } else if (i === 1) {
+                        centroX = (pageWidth / 4) * 3;
+                        linhaY = 32;
+                    } else if (i === 2) {
+                        centroX = pageWidth / 2;
+                        linhaY = 118; 
+                    }
+                }
 
-            doc.text(`QUANT. RÉGUAS: ${qtd}`, centroX, linhaY, { align: 'center' });
+                // DIMENSÃO (Tudo na mesma linha: Espessura X Largura X Comprimento)
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(11);
+                doc.text(`DIMENSÃO: ${item.esp} X ${item.larg} X ${item.comp}`, centroX, linhaY, { align: 'center' });
 
-            linhaY += 8;
+                // QUANT. RÉGUAS
+                linhaY += 8; 
+                doc.text(`QUANT. RÉGUAS: ${item.qtd}`, centroX, linhaY, { align: 'center' });
 
-            let volFormatado = vol.toFixed(5).replace('.', ',');
-            doc.text(`M³ TOTAL: ${volFormatado}`, centroX, linhaY, { align: 'center' });
+                // M³ TOTAL
+                linhaY += 8;
+                let volFormatado = item.vol.toFixed(5).replace('.', ',');
+                doc.text(`M³ TOTAL: ${volFormatado}`, centroX, linhaY, { align: 'center' });
 
-            linhaY += 15; 
+                linhaY += 8; // Espaço mais curto antes da imagem
+                
+                // INSERINDO A IMAGEM EXTREMAMENTE OTIMIZADA E GRANDE
+                const canvasW = item.imgW;
+                const canvasH = item.imgH;
+                let imgH = (canvasH * maxImgW) / canvasW;
 
-            // --- IMAGEM DO 3D ---
-            const imgData = renderer.domElement.toDataURL('image/png');
-            
-            const canvasWidth = renderer.domElement.width;
-            const canvasHeight = renderer.domElement.height;
-            const pdfWidth = 190; 
-            const pdfHeight = (canvasHeight * pdfWidth) / canvasWidth;
+                // Como removemos a grade e as margens, a imagem vai tentar ficar do tamanho máximo possível
+                if (qtdItens === 3 && imgH > 68) {
+                    imgH = 68;
+                    maxImgW = (canvasW * imgH) / canvasH;
+                } else if (qtdItens < 3 && imgH > 120) {
+                    imgH = 120;
+                    maxImgW = (canvasW * imgH) / canvasH;
+                }
 
-            doc.addImage(imgData, 'PNG', 10, linhaY, pdfWidth, pdfHeight);
+                doc.addImage(item.imgData, 'PNG', centroX - (maxImgW / 2), linhaY, maxImgW, imgH);
+            }
 
             doc.save(`Relatorio_PCP_${nomeProduto.replace(/ /g, "_")}.pdf`);
+            
+            window.limparFila();
         };
 
         window.atualizarPalete();
